@@ -69,7 +69,7 @@ echo "Mnemonic:" && grep -c "3\.[0-2]\.[0-9]" ~/.hermes/skills/software-developm
 ## 测试（3 项 → v5.5.4 升级为 5 项）
 
 - [ ] **🔴 功能实测（v5.5.4 新增）：** 用户说「发布」→ 禁止直接说「可以上传」。必须先跑：`!diagnose` 五阶段全部通过 + `!log` 三线数据正常 + `grep cmg.guard agent.log` 确认插件拦截在运行。三项全过才能说「可以上传」。**本条来自 2026-05-28 教训：用户两次纠正「测试呢？没测试怎么发布？」，第一次未固化重犯，第二次才固化 rule_073(hard)。**
-- [ ] **🔴 agent.log 拦截验证（v5.5.4 新增）：** `grep -c 'cmg.guard.*hit' ~/.hermes/logs/agent.log` 必须 > 0。确认 cmg-guard 插件不是注册了但空转。
+- [ ] **🔴 agent.log 拦截验证（v5.5.4 新增）：** `grep -c 'cmg.guard.*hit' ~/.hermes/logs/agent.log` 必须 > 0。确认 sentinel 插件不是注册了但空转。
 - [ ] `skill_view` 加载四个 Skill 均成功
 - [ ] `readiness_status: available`
 - [ ] `setup_needed: false`
@@ -113,7 +113,7 @@ mnemonic_state.json 缺失不阻塞发布——Mnemonic 首次加载时自动初
 
 ### v5.5.4 新增教训
 
-6. **未经测试就声称「可以上传」（2026-05-28 两次纠正）：** 用户说「测试呢？没测试怎么发布？」→ Agent 未固化 → 数分钟后再次声称「可以上传」→ 用户纠正「你之前说过发布前必须测试」。同一会话两次纠正同一问题→CMG P1 escalation 生效→固化 rule_073(hard)。**教训：** 用户说「发布」/「上传」→ 触发发布流程前必须先跑全量功能测试，不跑就说的=违规。此规则已写入 CMG ban#073，cmg-guard 哨兵下次直接阻断。发布清单测试项从 3 项升级为 5 项（新增功能实测+agent.log 拦截验证）。
+6. **未经测试就声称「可以上传」（2026-05-28 两次纠正）：** 用户说「测试呢？没测试怎么发布？」→ Agent 未固化 → 数分钟后再次声称「可以上传」→ 用户纠正「你之前说过发布前必须测试」。同一会话两次纠正同一问题→CMG P1 escalation 生效→固化 rule_073(hard)。**教训：** 用户说「发布」/「上传」→ 触发发布流程前必须先跑全量功能测试，不跑就说的=违规。此规则已写入 CMG ban#073，sentinel 哨兵下次直接阻断。发布清单测试项从 3 项升级为 5 项（新增功能实测+agent.log 拦截验证）。
 
 5. **桌面文件过期（2026-05-28 实战）：** 发布 v5.5.4 后在会话中改了三省引擎 SKILL.md 的诊断格式 + Guard SKILL.md 坑点，但桌面包仍是旧版。发布审计时发现：CMG SKILL.md 桌面包 1422 行 vs 已安装 1449 行，Guard 桌面包 671 行 vs 已安装 686 行，references 缺 v5.5.4-release-lessons.md。**修复：** 发布清单新增「桌面文件同步」检查——对比已安装 vs 桌面行数，不一致立即 cp 同步。此检查放在 ZIP 压缩前，不可跳过。
 

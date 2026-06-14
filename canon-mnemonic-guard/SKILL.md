@@ -1,10 +1,10 @@
 ---
 name: canon-mnemonic-guard
-description: 三省引擎 (CMG) — 取自「吾日三省吾身」。v5.6.0 +Dashboard v1.0.0 +Guard v4.8.3。cmg-guard v1.3.0(17hooks+pre_tool_call+自披露闭环)。对外 role:guard stage:pre_action，内部三模块各自独立。
+description: 三省引擎 (CMG) — 取自「吾日三省吾身」。v5.6.0 +Dashboard v1.0.0 +Guard v4.8.3 +sentinel v1.4.0。三条核心线(Canon/Guard/Mnemonic) + 一条外观(CMG) + 两个插件(sentinel硬拦截/skill-autoload自启动)。对外 role:guard stage:pre_action。
 version: 5.6.0
 role: guard
 dependencies: [canon, guard, mnemonic]
-_comment: "v5.6.0 +Dashboard v1.0.0。cmg-guard v1.3.0(17hooks+pre_tool_call)。Canon v2.7.2 + Guard v4.8.3 + Mnemonic v3.5.3。skill-autoload v1.0.1 + cmg-guard v1.3.0。"
+_comment: "v5.6.0 +Dashboard v1.0.0。sentinel v1.4.0(平台检测+防幻觉)。Canon v2.7.2 + Guard v4.8.3 + Mnemonic v3.5.3。skill-autoload v1.0.1。三条核心线(Canon/Guard/Mnemonic) + 一条外观(CMG) + 两个插件(sentinel/skill-autoload)。"
 min_hermes_version: any
 platforms: [linux, macos, windows]
 author: L1veSong
@@ -15,9 +15,34 @@ metadata:
     related_skills: [canon, guard, mnemonic, canon-mnemonic-guard-dashboard]
 ---
 
-# 三省引擎 (CMG) v5.6.0 — 四包制外观引擎
+# 三省引擎 (CMG) v5.6.0
 
 > **对外身份**: guard (护栏) | **阶段**: pre_action | **中文名**: 三省引擎，取自「吾日三省吾身」
+
+## CMG 完整架构
+
+```
+三条核心线 (Skill 层)：
+  Canon v2.7.2 (典则线)     → 规则生产库。只管规则从哪来、怎么固化。
+  Guard v4.8.3 (护栏线)     → 规则执行器。AI 读规则自觉遵守，pre_action 五道闸。
+  Mnemonic v3.5.3 (忆存线)  → 状态记忆。记录错误、提取模式、数据源管理。
+
+一条外观 (Skill 层)：
+  CMG v5.6.0               → 统一引擎。四包制分装 + Dashboard + 诊断/协调。
+
+两个插件 (Plugin 层)：
+  sentinel v1.4.0         → 硬拦截层。17个Hook，只覆盖 ban 规则（60条）。
+  skill-autoload v1.0.1    → 自启动层。pre_llm_call 自动注入 CMG 加载指令。
+
+配套工具：
+  Dashboard v1.0.0         → Web 可视化管理（localhost:8765）
+
+规则执行双层模型：
+  自觉层 → Guard 核心线 → AI 读 SKILL.md → 69 条全量（60ban+4gap+3lazy+2meta）
+  硬拦层 → sentinel 插件 → Hook 关键词扫描 → 60 条 ban 独享
+  缺口   → 9 条 gap/lazy/meta 只有自觉，没有硬拦
+```
+
 > v5.5.0: +微型调度器 | v5.4.2: M3清零 | v5.4.0: 四大增强 | v5.2.0: 六大功能
 >
 > v2.2.0: + 扫盘提取 | v5.0.0: 三线合一外观模式 | v5.1.0: 四包制分装 | v5.2.0: 六大功能大更新 | v5.3.0: 典忆卫・闭环校验器 | v5.4.0: 四大增强 | v5.5.0: P2补全 | v5.5.0: M3清零
@@ -28,7 +53,8 @@ metadata:
 
 | 版本 | 变更 |
 |------|------|
-| v5.5.5 | +cmg-guard v1.3.0(17hooks+pre_tool_call堵SKILL.md未经authoring即改+post_llm_call任务完成证据校验+外部来源主张验证+自披露闭环) +四名冲突检测 | 当前 |
+| v5.6.0 | +Dashboard v1.0.0 +反思提示 +guard v4.8.3精简版 +sentinel v1.4.0(活跃规则注入+URL检测+CoVe自检) +规则清理(gap12→4,lazy9→3,4空壳删除,10死规则归档→dead/) | 当前 |
+| v5.5.5 | +sentinel v1.3.2(17hooks+pre_tool_call读写感知堵SKILL.md未经authoring即改+post_llm_call任务完成证据校验+外部来源主张验证+自披露闭环) +四名冲突检测 | |
 | v5.5.3 | +双层哨兵(A层正则+B层LLM语义) +init.py自动配置config.yaml +一键卸载 --uninstall +意图识别meta规则 +坑点17:发布打包审计 | |
 | v5.5.2 | +默认固化阈值10→3 +修复init.py版本号滞后(跨两个大版本) |
 | v5.5.1 | +README更新: 推荐skill-autoload插件自动加载CMG |
@@ -234,27 +260,27 @@ state.errors_since_solidify += 1
 
 ### Step 6: 钩子缺口检测 (v5.5.5)
 
-新规则写入后，自动分析此规则是否依赖 cmg-guard 特定钩子才能强制拦截。如果所需钩子未开启，提示用户。
+新规则写入后，自动分析此规则是否依赖 sentinel 特定钩子才能强制拦截。如果所需钩子未开启，提示用户。
 
 **检测映射表：**
 
 | 规则特征 | 所需钩子 | config.yaml 路径 |
 |---------|---------|-----------------|
-| 涉及 `patch`/`skill_manage` + `SKILL.md` | pre_tool_call | cmg_guard.hooks.pre_tool_call |
-| 涉及 `rm -rf`/`DROP TABLE`/`force-push` | pre_tool_call | cmg_guard.hooks.pre_tool_call |
-| 涉及「不能说」「禁止输出」「关键词」 | transform_llm_output | cmg_guard.hooks.transform_llm_output |
-| 涉及「安装成功但实际失败」「工具假报」 | transform_tool_result | cmg_guard.hooks.transform_tool_result |
+| 涉及 `patch`/`skill_manage` + `SKILL.md` | pre_tool_call | sentinel.hooks.pre_tool_call |
+| 涉及 `rm -rf`/`DROP TABLE`/`force-push` | pre_tool_call | sentinel.hooks.pre_tool_call |
+| 涉及「不能说」「禁止输出」「关键词」 | transform_llm_output | sentinel.hooks.transform_llm_output |
+| 涉及「安装成功但实际失败」「工具假报」 | transform_tool_result | sentinel.hooks.transform_tool_result |
 
 **检测流程：**
 
 ```
 1. 分析新规则的 keywords + description
 2. 按映射表匹配所需钩子
-3. 读取 ~/.hermes/config.yaml → cmg_guard.hooks.<hook> 是否开启
+3. 读取 ~/.hermes/config.yaml → sentinel.hooks.<hook> 是否开启
 4. 如果未开启 → clarify 弹窗：
 
    ⚠️ 规则已记录，但当前配置无法强制拦截。
-   此规则需要开启 cmg_guard.hooks.<hook_name> 钩子。
+   此规则需要开启 sentinel.hooks.<hook_name> 钩子。
 
    A) 现在开启（自动写入 config.yaml）
    B) 先不开，仅靠 AI 自觉
@@ -357,6 +383,8 @@ Guard:   role: guard,     stage: pre_action     → 只执行拦截，不生产�
 | `!datasource` | 「数据源」/「数据源状态」 | 查看当前数据源状态和切换历史（v5.5.0 M3） |
 | `!scan-recommendations` | 「扫描推荐」/「检查推荐列表」 | 扫描推荐列表，检测已安装但未配置的工具（v5.2.0） |
 | `!dashboard` | 「Dashboard」/「仪表盘」 | 打开可视化 Dashboard（启动 localhost:8765 服务器）。详见 `references/dashboard-guide.md` |
+| `!review` | 「审查规则」/「规则审计」/「审核死规则」 | 审计 gap/lazy 规则能否升级为 ban + 识别死规则。详见 `references/phase1-rule-audit-guide.md`（Phase 1 审计指南） |
+| `!review` | 「审查规则」/「规则审计」/「审核死规则」 | 审计 gap/lazy 规则能否升级为 ban + 识别死规则。详见 `references/phase1-rule-audit-guide.md`（Phase 1 审计指南） |
 
 ### 初始化命令
 
@@ -827,6 +855,9 @@ v1.0.0 缺乏跨会话状态：
 
 ---
 
+- [SSR 集成](references/ssr-integration.md) — 智配路由插件与 CMG 的协作关系、互补设计
+- [SSR GREEN 基准 v2](references/ssr-green-benchmark-v2.md) — bge-m3 中文领域术语盲区验证（2026-06-09）
+- [SSR 基准测试脚本](scripts/ssr-green-benchmark.py) — 独立运行 embedding 匹配精度测试
 - [init.py 名冲突检测设计](references/init-name-conflict-detection.md) — CMG 四名保护 + 双触发点检测 + 三选一解决
 - [联动待测清单](references/integration-test-checklist.md) — ralph-loop/VBC/diagnose 验证条件和状态
 - [配套Skill协同测试指南](references/companion-skill-testing-guide.md) — 四步检测法
@@ -834,10 +865,20 @@ v1.0.0 缺乏跨会话状态：
 - [Hermes 升级适配指南](references/hermes-upgrade-adaptation.md) — v0.13→v0.14.0 hook 迁移 + skill 恢复流程
 - [双层防御模型](references/layered-defense-model.md) — A 层正则哨兵 + B 层 LLM 语义判断架构
 - [v5.5.4 发布教训](references/v5.5.4-release-lessons.md) — 发布流程六条铁律
-- [自披露闭环参考案例](references/self-disclosure-loop.md) — 断言须附证据的三步闭环，cmg-guard v1.3.0 内置
-- [自披露闭环](references/self-disclosure-loop.md) — AI 断言必须附带证据，缺了拦截→重做（cmg-guard v1.3.0+ 内置）
-- [配套组件版本同步教训](references/companion-version-sync-lesson.md) — cmg-guard v1.3.0 升级时 7 处文档版本滞后，预防措施
+- [自披露闭环参考案例](references/self-disclosure-loop.md) — 断言须附证据的三步闭环，sentinel v1.3.0 内置
+- [自披露闭环](references/self-disclosure-loop.md) — AI 断言必须附带证据，缺了拦截→重做（sentinel v1.3.0+ 内置）
+- [配套组件版本同步教训](references/companion-version-sync-lesson.md) — sentinel v1.3.0 升级时 7 处文档版本滞后，预防措施
+- [防幻觉方法全景分析](references/anti-hallucination-methods-analysis.md) — 豆包+DeepSeek交叉分析，6种方案×CMG可行性对照
 - [对外命名规范](references/naming-convention-public-docs.md) — 禁止在对外文档中使用项目缩写，必须用完整名称
+- [GUI 壳子设计工作流](references/gui-shell-design-workflow.md) — 不要手写 CSS，先加载设计 tokens
+- [DeepSeek 外部评审对照](references/deepseek-review-2026-06-09.md) — 2026-06-09 三组对话评审，17条建议逐项对照 CMG 现状
+- [规则治理计划](~/.hermes/plans/cmg/rule-governance_task_plan.md) — SkillOS 论文启发：!review 命令，利用 hit_count 数据做规则减负（2026-06-13）
+- [CMG 最优升级方案](~/.hermes/plans/cmg/optimal-upgrade_plan.md) — v1.5.0→v2.0.0 完整路线图（2026-06-14）
+- [Dashboard 开发日志](references/dashboard-development-log.md) — 12 轮迭代完整记录
+- [Dashboard 迭代教训 v2](references/dashboard-development-lessons-v2.md) — 虚拟滚动/批量/趋势图迭代教训
+- [Dashboard 迭代教训 v3](references/dashboard-development-lessons-v3.md) — sentinel 改名+自适应重构+execute_code 陷阱
+- [sentinel 代码审计清单](references/cmg-guard-audit-checklist.md) — 7 项代码检查框架 + 已修复陷阱记录（2026-06-14）
+- [CMG 组件改名流程](references/rename-procedure.md) — cmg-guard → sentinel 全链路改名步骤（2026-06-14）
 
 ## 常见坑点 (维护本 Skill 时必读)
 
@@ -978,65 +1019,60 @@ v5.0.0 合并时误将统一外观命名为 `self-reflection-engine`——这是
 
 > 完整调研见 `references/companion-skills-research.md`（14 候选 → 8 通过）。
 
-### 三线归属
+### Companion Line Assignment
 
-#### 护栏线（拦截执行 · 验证闭环）
+#### Guard Line (Interception · Verification)
 
-| 推荐 | 增强点 | 集成方式 |
-|------|--------|---------|
-| `canon-mnemonic-guard-dashboard` | Web 可视化 Dashboard（规则浏览/配置修改/增删规则） | `!dashboard` 启动 localhost:8765，详见 Dashboard skill |
-| `ralph-loop` | 执行闭环 | Guard 拦截跳步骤 → 自动触发闭环验证 |
-| `verification-before-completion` | 证据先于断言 | Guard 拦截「声称完成」→ VBC 证据协议 |
-| `diagnose` | 根因调试 | 同规则连续命中 → !diagnose 诊断根因 |
-| `karpathy-coding-guidelines` | 进攻型行为准则 | 防守+进攻互补，已双向认可 |
+| Companion | Enhancement | Integration |
+|-----------|-------------|-------------|
+| `canon-mnemonic-guard-dashboard` | Web dashboard (rule browse/config/CRUD) | `!dashboard` → localhost:8765 |
+| `ralph-loop` | Execution loop | Guard intercepts skipped steps → auto-trigger verification |
+| `verification-before-completion` | Evidence before claims | Guard intercepts "done" claims → VBC evidence protocol |
+| `diagnose` | Root cause debugging | Same rule hits ≥3 → `!diagnose` |
+| `karpathy-coding-guidelines` | Proactive coding discipline | Defense + offense, mutually acknowledged |
 
-#### 典则线（规则扩展 · 可视化）
+#### Canon Line (Rule Extension · Visualization)
 
-| 推荐 | 增强点 | 集成方式 |
-|------|--------|---------|
-| `plur` | 扩展规则来源 | RuleReader 读取 `~/.plur/engrams.yaml` |
-| `obsidian` | rules/ 可视化 | .md 原生格式，Dataview 查询 + 图谱链接 |
+| Companion | Enhancement | Integration |
+|-----------|-------------|-------------|
+| `plur` | Extended rule sources | RuleReader reads `~/.plur/engrams.yaml` |
+| `obsidian` | rules/ visualization | Native .md format, Dataview queries + graph links |
 
-#### 跨线共享
+#### Cross-line Shared
 
-| 推荐 | 增强点 | 集成方式 |
-|------|--------|---------|
-| `skill-autoload` | v1.0.1: 自动加载 CMG，零手动 | Plugin，`pre_llm_call` 钩子。配套插件，非核心四线 |
-| `cmg-guard` | v1.3.0: 17hook硬拦截 + pre_tool_call阻断 + 任务完成证据校验 + 外部来源主张验证 + pre_llm_call任务推荐（检测任务类型→自动推荐配套工具） | Plugin，`pre_llm_call` + `transform_llm_output` + `post_llm_call` 三钩子。配套插件，非核心四线。详见 `references/cmg-guard-v1.3.0-escalation.md` |
-| `dashboard` | v1.0.0: 可视化 Dashboard（规则浏览/搜索/排序/展开详情，钩子开关，规则增删，亮暗主题） | 独立工具，`cmg dashboard` 或 `!dashboard` 启动。详见 `references/dashboard-development-lessons.md` |
-| `cmg-dashboard` | v1.0.0: Web 管理后台，规则统计+配置开关 | `!dashboard` 启动 localhost 服务器，浏览器打开。配套工具，非核心四线 |
-| `rtk-rewrite` | 压缩终端输出 60-90% token | Gateway 插件，安装即自动运行 |
-| `hermes-agent-skill-authoring` | 发布流程风控 | 13 项自检清单 + 版本号 grep 验证 |
-| `dashboard` | 可视化 Dashboard（localhost:8765 服务器 + 规则管理 + 配置修改） | Companion 项目。`!dashboard` 或 `python3 ~/.hermes/dashboard/server.py` 启动。详见 `references/dashboard-quickstart.md` |详见 `references/dashboard-quickstart.md` |
+| Companion | Enhancement | Integration |
+|-----------|-------------|-------------|
+| `skill-autoload` | Auto-loads Canon-Mnemonic-Guard, zero manual steps | Plugin, `pre_llm_call` hook |
+| `sentinel` | v1.4.0: Active rule injection + URL detection + CoVe self-check + platform detection + 17 hooks | Plugin, `pre_llm_call` + `transform_llm_output` + `post_llm_call` + `pre_tool_call` hooks |
+| `hermes-agent-skill-authoring` | Release process guardrails | 13-item checklist + version grep verification |
+| `dashboard` | Web dashboard at localhost:8765 — rule browse/search/sort, config management, trend charts, theme/i18n | Companion tool, `!dashboard` to launch. See `references/dashboard-development-lessons.md` |
 
-> **核心四线 vs 配套插件：** Canon/Guard/Mnemonic/外观层 是 CMG 核心四线——规则体系的基石。skill-autoload 和 cmg-guard 是配套插件——辅助核心工作，离开 Hermes 不可用，换了平台需要重新适配。
-| `agent-s-deployment` | Agent S 部署与配置（本地 UI-TARS/HF/Gemini/Together/OpenRouter grounding 方案对比） |
+> **Core vs Companion:** Canon/Guard/Mnemonic/CMG are the four core lines — the rule system foundation. skill-autoload and sentinel are companion plugins — auxiliary, Hermes-dependent, platform-specific.
 
-#### 参考模式（Hermes 下 hook 不生效）
+#### Reference Patterns (Hermes hook unavailable)
 
-| 参考 | 模式价值 |
-|------|---------|
-| `gstack/careful` | 破坏性命令检测模式（rm -rf/DROP/force-push） |
-| `gstack/guard` | careful+freeze 三层过滤（命令→路径→行为） |
+| Reference | Pattern Value |
+|-----------|---------------|
+| `gstack/careful` | Destructive command detection (rm -rf/DROP/force-push) |
+| `gstack/guard` | careful+freeze three-layer filter (command→path→behavior) |
 
-### 微型调度器（v5.5.0）
+### Micro Scheduler (v5.5.0)
 
-Guard 拦截时自动匹配配套 skill，提示加载。
+Automatically matches companion skills when Guard intercepts, suggests loading.
 
-**拦截触发型：**
+**Intercept-triggered:**
 
-| 拦截场景 | 推荐 |
-|---------|------|
-| 过设计/复杂化 | `karpathy-coding-guidelines` |
-| 跳步骤/未闭环 | `ralph-loop` |
-| 声称完成未验证 | `verification-before-completion` |
-| 同规则连续命中≥3次 | `diagnose` |
+| Intercept Scenario | Recommendation |
+|--------------------|----------------|
+| Over-design / over-complicate | `karpathy-coding-guidelines` |
+| Skip steps / no closure | `ralph-loop` |
+| Claim "done" without verification | `verification-before-completion` |
+| Same rule hits ≥3 | `diagnose` |
 
-**被动/基础设施型（标注状态即可）：**
+**Passive / Infrastructure (status-only):**
 
 | 推荐 | 状态 |
 |------|------|
-| `rtk-rewrite` | 已安装即自动运行 |
 | `plur` | CMG 扫盘时自动读取 |
 | `obsidian` | 直接浏览 rules/*.md |
 | `hermes-agent-skill-authoring` | 发布时手动加载 |
@@ -1348,8 +1384,18 @@ v2.4   规则效果评分        v3.0   ✅ 已发布        v4.0   ✅ 已发�
 | E4 | ✅ 四包制分装（v5.1.0 已发布） | canon/guard/mnemonic 独立 Skill 包 + CMG 外观索引 |
 | E5 | ✅ Dashboard 可视化（v5.5.5） | !dashboard 启动 Web 管理后台，规则统计+配置开关 |
 
-> **18 项全部完成。** CMG 功能闭环，无遗留待办。
-> **C/G/M/E/P 全部完成。** CMG 功能闭环。Dashboard 为独立配套项目，不入四包制。
+> **C/G/M/E/P 序列全部完成。** Dashboard 为独立配套项目，不入四包制。
+>
+> **⚠️ 2026-06-14 全系统审计发现未闭合缺口（详见 `references/v2.0-architecture.md`）：**
+> 1. **9/69 规则无硬拦截** — gap(4)+lazy(3)+meta(2) 全靠 AI 自觉，sentinel 执行层只覆盖 ban(60)
+> 2. **CLI/GUI CMG 功能不等效** — transform_llm_output 依赖 CLI 交互循环，GUI 无 retry 能力
+> 3. **事后拦截模型有结构上限** — 需转向事前注入 + 自动重试闭环
+>
+> **升级路线（详见 `~/.hermes/plans/cmg/optimal-upgrade_plan.md`）：**
+> - v1.5.0: pre_llm_call 活跃规则注入 + 哨兵跨会话提醒（CLI+GUI 同步受益）
+> - v2.0.0: 行为级检测器(gap/lazy/meta) + 自动重试闭环 + 三层验证管线（根治）
+>
+> **v5.6.0 新增：反思提示。** CMG 激活后自动注入 `[CMG 反思] 动手前停一秒：有配套 skill 能做这件事吗？有就用。没有再自己来。` — 每次行动前提醒 AI 检查可用技能。不依赖任何 Hook 或 Plugin，所有平台生效。
 
 ---
 
@@ -1397,7 +1443,7 @@ Hermes v0.13→v0.14.0 实际影响：
 **每次 Hermes 大版本升级后的验证清单：**
 1. `grep 'unknown hook' ~/.hermes/logs/agent.log` → 有则适配插件
 2. `ls ~/.hermes/skills/canon/SKILL.md` → 不存在则从 GitHub zip 恢复
-3. 对照最新 VALID_HOOKS 列表验证 skill-autoload 和 cmg-guard 的 hook 声明
+3. 对照最新 VALID_HOOKS 列表验证 skill-autoload 和 sentinel 的 hook 声明
 4. skill-autoload 需升级到 v1.0.1（`pre_llm_call`，详见 `references/hermes-upgrade-adaptation.md`）
 5. 重启 Hermes，确认日志无 `unknown hook` 警告
 
@@ -1432,7 +1478,7 @@ Hermes v0.13→v0.14.0 实际影响：
 
 详见 `references/release-checklist.md`。
 
-CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，但 cmg-guard 插件只做了子串匹配。导致口语化纠正漏过——"你不能这么说话""确认好了再说""你咋老这样"全部漏过。
+CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，但 sentinel 插件只做了子串匹配。导致口语化纠正漏过——"你不能这么说话""确认好了再说""你咋老这样"全部漏过。
 
 **过渡方案：** rule_019 已扩充至 18 个关键词。**治本方向：** 双层防御模型——A 插件层（轻量正则否定词扫描）+ B Skill 层（LLM 语义意图判断）。A 负责不漏，B 负责不错。详见 `references/layered-defense-model.md`。
 
@@ -1462,11 +1508,11 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 
 详见 `references/v5.5.5-session-lessons.md`。
 
-### 坑点 29: cmg-guard 管输出不管内部推理（架构边界 · 2026-05-30）
+### 坑点 29: sentinel 管输出不管内部推理（架构边界 · 2026-05-30）
 
-**症状：** AI 在思考阶段就编造了「三个AI交叉验证完成」的结论——DeepSeek链接被cookie墙挡了没读到，但AI在脑子里已经假设「应该没问题」，然后基于这个假结论输出。cmg-guard 的 post_llm_call 能拦「说出来的假话」，但拦不住「脑子里先产生的假结论」。
+**症状：** AI 在思考阶段就编造了「三个AI交叉验证完成」的结论——DeepSeek链接被cookie墙挡了没读到，但AI在脑子里已经假设「应该没问题」，然后基于这个假结论输出。sentinel 的 post_llm_call 能拦「说出来的假话」，但拦不住「脑子里先产生的假结论」。
 
-**根因：** Hermes 钩子机制只拦截输入/动作/输出三层，不介入 LLM 原生推理过程。这不是 cmg-guard 的 Bug，是架构边界。
+**根因：** Hermes 钩子机制只拦截输入/动作/输出三层，不介入 LLM 原生推理过程。这不是 sentinel 的 Bug，是架构边界。
 
 **效果区分：**
 - ✅ 隔离：AI 编了假话想输出 → post_llm_call 拦截 → 用户看不到假话
@@ -1474,23 +1520,73 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 
 **正确做法：**
 1. 接受边界——当前技术无法干预 LLM 内部推理
-2. 双层加固：CMG hard 规则约束思考 + cmg-guard 输出层兜底拦截
+2. 双层加固：CMG hard 规则约束思考 + sentinel 输出层兜底拦截
 3. 长期方向：pre_llm_call 自动预拉取素材，让模型推理前就知道「这个链接读不到」
 
-### 坑点 31: 配套工具列了但从不用——AI不会主动提议（2026-05-30）
+### 坑点 31: 配套工具列了但从不用——AI不会主动提议（2026-05-30 · 2026-06-04 二次复盘）
 
 **症状：** ralph-loop 在 CMG 推荐列表里挂了数个版本，明确写着「Guard 拦截跳步骤→自动触发闭环验证」。但今天打包漏组件时 AI 从头到尾没提一句「用 ralph-loop 管着」。事后用户问起才想起来。
 
 **根因：** 微型调度器是事后补救（拦截后才匹配推荐）。用户需要的是事前——任务开始前就弹出推荐。
 
-**修复（v5.5.5 已落地）：**
-- cmg-guard `pre_llm_call` 新增 `_check_task_recommendations()`——检测到「打包/写代码/调试」等任务关键词时自动输出配套工具建议
+**v5.5.5 修复（已落地但不完整）：**
+- sentinel `pre_llm_call` 新增 `_check_task_recommendations()`——检测到「打包/写代码/调试」等任务关键词时自动输出配套工具建议
 - 映射表：打包→ralph-loop+VBC+authoring / 写代码→TDD+brainstorming+planning / 调试→diagnose / 测试→TDD+VBC
 - 每会话每任务类型只提醒一次，不刷屏
 
-**正确做法：** 不依赖 AI 自觉翻推荐列表。插件层在任务开始时主动亮牌。
+**v5.5.5 修复的局限性（2026-06-04 用户现场纠正）：**
+- 只覆盖 **5 种任务模式**（打包/写代码/调试/测试/写文章），大量常见任务无匹配：设计、金融、旅行、ASCII 艺术、部署、数据分析……
+- 只推荐 **CMG 配套工具**（ralph-loop/VBC/brainstorming/TDD/diagnose），不推荐用户 200+ 个实际 skill（ui-ux-pro-max、travel-website-generator、technical-analysis……）
+- 用户仍然需要手动说「用 brainstorming」「用 ui-ux-pro-max」——AI 不会自动匹配
+- 截图社区（李冰倩评论区）讨论的「writingskill 指挥所有技能」「记忆索引化 21k→3k 按需加载」——就是在解决同一个问题：**如何让 AI 自动匹配用户意图到合适的 skill**
 
-**症状：** 发布 CMG v5.5.5 时桌面包只放了 4 个 skill（canon/guard/mnemonic/canon-mnemonic-guard），漏了 2 个 plugin（skill-autoload/cmg-guard）。README 里明确列了 6 组件，打包时脑子里只装了「4个skill」。
+**解决方案（2026-06-04 落地）：SSR 插件**
+
+已开发 **智配路由 (SSR — Smart Skill Router Plugin)** v0.1.0 作为独立 pre_llm_call 插件填补此缺口：
+
+- A 层（关键词精确匹配，零延迟）+ B 层（Ollama qwen2.5:3b 语义匹配，兜底）
+- B 层连续命中 3 次自动升级到 A 层
+- 完全解耦——匹配的是功能语义，不依赖具体 skill 名
+- 与 IF 不冲突：SSR 是建议层，IF 是调度层。建议在前，调度在后
+- 源码：`~/.hermes/plugins/ssr/__init__.py`
+- 设计文档：`~/.hermes/plans/smart-skill-router/task_plan.md`
+
+SSR 与 CMG 的 sentinel task_recommendations 关系：互补不替代。sentinel 继续负责 CMG 配套工具推荐（5 种模式），SSR 负责全量 skill 库推荐（200+ skill）。详见 `references/ssr-integration.md`。
+
+**待解决方向（SSR v0.2+）：**
+1. B 层匹配质量验证（20 条真实请求测命中率）
+2. A 层关键词表从社区/用户反馈中持续优化
+3. 未来方向：skill 注册表 + 向量/关键词匹配 + 自动 `skill_view()`——截图里「得闲饮茶」说的索引化方案已部分实现
+
+**正确做法：** 不依赖 AI 自觉翻推荐列表。SSR 插件层在任务开始时主动亮牌。sentinel 的 task_recommendations 仍需保留——覆盖 CMG 自身需要的关键场景作为 A 层快速路径。
+
+**SSR 回声规则（2026-06-04 追加）：** SSR 推荐命中 ≠ AI 展示了。SSR 输出在 agent.log 里，不在对话中——用户看不到。AI 必须在收到 SSR 推荐后的**第一条回复中**展示推荐结果，格式：
+
+```
+[SSR] 检测到任务需求，建议加载: brainstorming (DISCOVER) | ui-ux-pro-max (BUILD) | popular-web-designs (BUILD)
+```
+
+然后再进入 clarify/action。实战案例：用户说"设计登录页面"，SSR B 层命中 3 个 skill，但 AI 第一条消息直接是 clarify("这个登录页是给什么项目用的？")，用户没看到 SSR 结果，误以为 SSR 没工作。
+
+**SSR 存活验证（v0.1.0 新增，2026-06-04 实战驱动）：**
+
+每次会话开始、或用户问"SSR 加载了吗"时，必须验证 SSR 是否真的在产出推荐——装了≠在工作：
+
+```bash
+grep 'ssr' ~/.hermes/logs/agent.log | tail -5
+```
+
+三种状态判定：
+
+| A 层规则 | B 层状态 | 实际效果 | 动作 |
+|---------|---------|---------|------|
+| >0 | 正常/超时 | ✅ 至少 A 层工作 | 正常使用 |
+| 0 | 正常 | ⚠️ 仅 B 层兜底 | 可接受，等 A 层积累 |
+| **0** | **超时** | ❌ SSR 形同虚设 | **立即降级为手动 skill 匹配** |
+
+**本会话实战案例（2026-06-04）：** SSR 注册了 223 个 skill，但 A 层规则 0 + B 层 Ollama 每次超时 → 5 个任务 0 条推荐。AI 必须手动加载 ui-ux-pro-max / diagnose / ascii-art / technical-analysis。**不要假设 SSR 装了=在工作。验证命令是必修课。**
+
+**症状：** 发布 CMG v5.5.5 时桌面包只放了 4 个 skill（canon/guard/mnemonic/canon-mnemonic-guard），漏了 2 个 plugin（skill-autoload/sentinel）。README 里明确列了 6 组件，打包时脑子里只装了「4个skill」。
 
 **根因：** CMG 发布自检清单没有「逐组件核对 README 声明数 vs 桌面实际目录数」这一步。
 
@@ -1508,6 +1604,39 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 
 **教训：** 需要分析因果关系时不能只看表面。用户观察到的"安装 brainstorming 后才出现选择弹窗"是线索——顺着这个线索找到 Guard 的 ClarifyInterceptor 规格才算挖到根。详见 `references/guard-spec.md` 第五层拦截器。
 
+### 坑点 49: CHANGELOG 节插入可能级联删除相邻节头（2026-06-15 实战）
+
+**症状：** 在 CHANGELOG.md 中补加缺失的 v5.5.2 版本条目时，old_string 匹配到了 v5.5.2 的节头和下一个 v5.5.3 的节头——两个节头都被替换掉了。v5.5.3 的内容变成孤儿文本挂在 v5.5.4 下面。
+
+**根因：** `patch` 的 old_string 包含了 `## v5.5.2 ...` 到 `## v5.5.3 ...` 的全部内容。替换后两个节头都消失。CHANGELOG 相邻版本节头之间没有唯一分隔符——它们就是用 `## vX.Y.Z` 和 `---` 分隔的。
+
+**正确做法：**
+1. 插入新节时，old_string 只匹配**分隔线**（`---`），不碰任何版本的节头
+2. new_string 包含 `---` + 新版本条目 + `---` + 现有版本头
+3. 补完后立即 `grep -o '## v[0-9.]*' CHANGELOG.md` 验证所有版本头完整
+4. 如果发现节头缺失，不要打补丁叠补丁——直接重读文件重新构造正确的 old_string/new_string
+
+**检查清单：** 插入后逐条核对：新节头存在 ✓、相邻节头完整 ✓、版本倒序正确 ✓。
+
+### 坑点 50: 配套表是 Dashboard 的唯一数据源——必须全英文（2026-06-15 实战）
+
+**症状：** Dashboard 英文模式下，配套技能列表仍显示大片中文（「智配路由」「压缩终端输出」「自动匹配用户意图到 200+ skill」）。用户质问：英文切换为何有残留中文？
+
+**根因：** Dashboard 的配套技能列表**直接解析 CMG SKILL.md 中的 Markdown 表格**（`server.py` 的 `parse_companion_skills()` 函数）。表格的「增强点」和「集成方式」列原样渲染到 HTML——i18n (`applyLang()`) 只处理带 `data-i18n` 属性的静态 UI 文本，不处理从 SKILL.md 动态解析的自由文本。
+
+**数据流：** CMG SKILL.md 配套表 → Dashboard `parse_companion_skills()` → JSON API → 前端 JS → HTML 渲染。整条链路没有翻译层。
+
+**正确做法：**
+1. CMG SKILL.md 中所有配套技能表的描述必须用英文（或双语——中文在括号内）
+2. 表头必须用英文：`Companion | Enhancement | Integration`
+3. 每次增加/修改配套 skill 后，检查 Dashboard 英文模式无中文残留
+4. Dashboard 的 i18n 机制只能覆盖静态 UI——动态内容的质量由数据源保证
+
+**已被移除的不合格条目（2026-06-15）：**
+- `ssr` (Smart Skill Router) — 独立 pre_llm_call 插件，CMG 不调用它，不满足「自动感知」标准
+- `rtk-rewrite` — Gateway 插件压缩终端输出，与 CMG token 消耗无关，不满足「互补非重叠」标准
+- `cmg-dashboard` — 与 `dashboard` 重复条目
+
 ### 坑点 24: 推荐/讨论配套 skill 前必须加载该 skill（2026-05-29）
 
 **症状：** 向用户推荐 obsidian 作为 CMG 配套可视化工具，讨论数周（图谱视图、vault 结构、CMG 规则浏览），但从未加载 obsidian skill。该 skill 明确要求「推荐前先 `ls /Applications/Obsidian.app` 验证」，却因未加载而漏过。用户问「在哪打开图谱视图」时才发现应用根本不存在。
@@ -1520,17 +1649,32 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 3. 不通过预检 → 先帮用户安装/配置，再继续讨论功能
 4. vault 文件 ≠ 应用安装——`ls` 验证是唯一可靠方式
 
-### 坑点 26: 结论先于验证——所有局部错误的共同根因（2026-05-29 元规则）
+### 坑点 48: execute_code 沙箱隔离——多次调用互踩致文件清空（2026-06-14 实战）
+
+**症状：** 用 3 次 `execute_code` 先后修改 `server.py`，第三次调用时文件变成 0 字节。所有备份都是 5 天前的旧版本。
+
+**根因：** 每次 `execute_code` 从磁盘读取原始文件 → 修改 → 写回。但多个调用在不同沙箱中并行/串行执行时，第二次读到的仍是修改前的版本（因为读发生在第一次写之前或沙箱未刷新），导致第二次写入覆盖第一次的修改。第三次更可能基于空文件写入。
+
+**正确做法：**
+1. 改同一文件时，**一次 execute_code 完成所有修改**，不在多次调用中分步修改
+2. 必须分步时，每次 `execute_code` 开头用 `with open(path) as f: c = f.read()` 重新读取当前磁盘状态
+3. **改前必备份** — `cp file file.bak.$(date +%Y%m%d_%H%M%S)` 作为终端命令在 execute_code 之前执行
+4. 备份是救命稻草 — 本条坑点因有 `.bak5` 恢复才没有造成永久损失
+
+### 坑点 26: 结论先于验证——所有局部错误的共同根因（2026-05-29 元规则 · 2026-06-04 再现）
 
 **症状：** 单次会话内出现 4 次同一模式的错误：默认 Obsidian 装了（没验证）、扫描不递归报假缺失（没验证）、说 gstack/guard 不能用（没验证就断言）、删完才找备份（动作排在验证前）。每一次都是同一条链：冲动下结论 → 事后被纠正 → 补记规则。
 
-**根因：** 这不是孤立的 4 个错误——是「验证先于动作」这条元规则没有被内化。CMG 有 56 条 ban 规则但缺少最高层级的约束：**做任何断言前先查证，做任何删除前先确认有备份。**
+**2026-06-04 再现：** 用户展示三张社区截图讨论 skill 自动匹配痛点，AI 声称"Hermes 原生支持自动 skill 匹配"——未加载任何 skill 验证、未读取 GitHub Issue #4589、未检查 sentinel _TASK_RECOMMENDATIONS 的实际覆盖范围（只有 5 条模式）。用户当场纠正。此次纠正直接驱动了 SSR 插件的完整设计→IF逼问→Plan→实现流程。
+
+**根因：** 这不是孤立的错误——是「验证先于动作」这条元规则没有被内化。CMG 有 56 条 ban 规则但缺少最高层级的约束：**做任何断言前先查证，做任何删除前先确认有备份。**
 
 **正确做法：**
 1. 推荐工具前 → `ls` / `pip3 show` / `skill_view` 验证安装状态
 2. 说「不能用」前 → 读源码或查文档确认 Hook/指令是否真的不兼容
 3. 删文件前 → 确认有备份（源码仓库、本地副本、可恢复路径）
 4. 下结论前 → 找到至少一个可追溯的证据来源
+5. 说「系统支持 X」前 → 加载相关 skill、读 GitHub Issues、实际测试——多源交叉验证
 
 **相关规则：** 本坑点被同时记录为 CMG ban 规则 `ban_act_before_verify`（ban 类型，56 条中的第 56 条）。这是「为什么其他规则被反复违反」的上游原因。
 
@@ -1617,6 +1761,355 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 - 内部会话中快速指代可以用"CMG"
 - 已入 ban 规则 `ban_no_cmg_abbreviation`（hard）
 
+### 坑点 47: 配套插件改名必须全链路同步 CMG 文档（2026-06-14 sentinel 改名实战）
+
+**症状：** sentinel（原 cmg-guard）改名后，CMG SKILL.md 中 71 处引用 + 22 个 reference 文件 + plan 文件全部需要同步更新。只改插件本身不够——CMG 文档中到处引用旧名称。
+
+**受影响范围：**
+- CMG SKILL.md — 架构图、坑点、推荐列表、命令参考中大量引用旧名
+- 22 个 references/*.md — 每个都可能含旧插件名
+- 8 个 plan 文件 — master-status/optimal-upgrade 等
+- rules/ — ban_071 等规则文件中列举例外
+- CHANGELOG.md / README.md — 版本日志中引用
+- errors.jsonl — 历史记录
+
+**正确做法：**
+1. 改名后立即 `grep -rn 'old-name'` 扫描全部 CMG 生态文件
+2. 用 Python 脚本批量替换（`content.replace`），比逐个 patch 快
+3. 替换后再次 grep 确认零残留
+4. 同步更新 memory 条目
+5. 同步更新 plan 文件（master-status 组件列表、optimal-upgrade 架构图）
+6. 同步更新备份（`old.v1.4.0-stable` → `new.v1.4.0-stable`）
+
+**完整流程见 `hermes-agent-skill-authoring` 的 `references/plugin-rename-workflow.md`。**
+
+### 坑点 47: Plugin 改名后必须重启 Hermes 才能生效（2026-06-14 实战）
+
+**症状：** 完成 `cmg-guard` → `sentinel` 全链路改名后，`agent.log` 仍显示 `hermes_plugins.cmg_guard: [cmg-guard]`。插件缓存持有旧模块名，直到 Hermes 重启才刷新。
+
+**根因：** `agent.log` 中 `INFO hermes_plugins.sentinel: [sentinel] v1.4.0 registered` 只在重启后的新 session 出现。旧 session 的插件缓存不会因为文件改名而自动更新——Python 模块已加载到内存中。
+
+**正确做法：** 插件改名后的验证流程必须包含 Hermes 重启。重启后 `grep 'sentinel.*registered' agent.log` 确认新名称出现。不重启的验证是假验证——旧缓存会欺骗你。
+
+### 坑点 47: 改名后 dashboard/init.py/配置三处连锁断裂（2026-06-14 实战）
+
+**症状：** `cmg-guard` → `sentinel` 改名后，CMG SKILL.md + plan 文件全部更新完毕，自信「零残留」。但实际有三处断裂：
+
+1. **dashboard/server.py** — `read_config()`/`write_config()` 仍读写 `cmg_guard` key，配置页完全失效；skip 列表仍写 `cmg-guard`，配套 skill 过滤错误；banner/footer 版本号 `v5.5.5` 未升到 `v5.6.0`
+2. **scripts/init.py** — 硬编码版本号 `2.7.0`/`3.5.0`/`v5.5.5` 落后两个大版本
+3. **dashboard 硬编码 UI 文本** — 「近30天无拦截记录」不检查实际数据，11 次拦截也照样显示
+
+**根因：** `grep -r` 只搜了 skill/plugin/plan 目录，没搜 `~/.hermes/dashboard/` 和 `scripts/init.py`。改名影响面 > 预期。
+
+**正确做法：**
+1. 改名后 `grep -r` 范围必须包含：`~/.hermes/skills/` + `~/.hermes/plugins/` + `~/.hermes/plans/` + `~/.hermes/dashboard/` + `~/.hermes/self-reflection/` + `~/.hermes/config.yaml`
+2. `init.py` 硬编码版本号与 SKILL.md frontmatter 不同步 → 发布前必须 grep 验证
+3. 改名后重启 dashboard 服务——旧进程不会自动重载
+
+### 坑点 47: 修改 Dashboard server.py 前必须备份（2026-06-14 实战 · 文件被清空）
+
+**症状：** execute_code 多次调用互踩，server.py 被清空为 0 字节。幸好有 `server.py.bak5` 恢复。
+
+**正确做法：** 修改前执行 `cp ~/.hermes/dashboard/server.py ~/.hermes/dashboard/server.py.bak.$(date +%Y%m%d_%H%M%S)`。该文件不在版本控制中，备份是唯一保险。
+
+**教训：** execute_code 沙箱每次调用都读原始文件——多次调用之间状态不共享，前一次写入会被后一次覆盖。改 server.py 用一条 execute_code 完成全部修改，不要分多条。
+
+**症状：** T7 GREEN baseline 显示"关键词命中: []"全部场景。实际 a_rules.json 有 ascii/debug/金融等规则，但全部漏过。
+
+**根因：** benchmark 脚本写死了 `rule_data.get("patterns", [])`，但 a_rules.json 的 regex 模式是 **dict 的 key**，不是 nested `patterns` 字段。同时 `skills` 条目有 str 和 dict 两种格式（人工规则用 `[{name, phase}]`，自动生成用 `["skill-name"]`），硬编码 `s["name"]` 在 str 格式上 crash。
+
+**正确做法：**
+```python
+# ✅ regex key 匹配 + str/dict 兼容
+for rule_key, rule_data in a_rules.items():
+    if re.search(rule_key, msg, re.IGNORECASE):
+        for s in rule_data.get("skills", []):
+            name = s["name"] if isinstance(s, dict) else s
+            kw_hits.add(name)
+```
+
+**教训：** 任何读取 a_rules.json 的脚本必须先确认数据结构——人工规则和自动生成规则的字段格式不同。不假设 `skills` 条目类型。
+
+### 坑点 48: init.py 版本号硬编码，常规 grep 可能漏过（2026-06-14 实战）
+
+**症状：** 发布 CMG v5.6.0，打包后验证发现 `scripts/init.py` 中三处版本号滞后：canon 2.7.0→2.7.2、mnemonic 3.5.0→3.5.3、CMG 标记 v5.5.5→v5.6.0。
+
+**根因：** `grep -rn 'v[0-9]\.[0-9]\.[0-9]'` 匹配的是文档中 `vX.Y.Z` 格式，但 init.py 里是 `"2.7.0"`、`"3.5.0"` 等 JSON 字符串格式，不带 `v` 前缀 → grep 漏过。
+
+**正确做法：**
+```bash
+# 发布前专项检查 init.py
+grep -E '(canon|guard|mnemonic|CMG).*v?[0-9]\.[0-9]\.[0-9]|version.*[0-9]\.[0-9]\.[0-9]' scripts/init.py
+```
+对比 SKILL.md frontmatter 的实际版本号，不一致立即同步。
+
+**教训：** 版本号铁律说「init.py 也含硬编码版本号，发布前 grep 不可遗漏」——但只说「grep 不可遗漏」，没说「常规 grep 命令可能漏过 init.py 的 JSON 格式」。发布清单已加入 step 1.5 专项检查。
+
+**症状：** T7 GREEN baseline 显示"关键词命中: []"全部场景。实际 a_rules.json 有 ascii/debug/金融等规则，但全部漏过。
+
+**根因：** benchmark 脚本写死了 `rule_data.get("patterns", [])`，但 a_rules.json 的 regex 模式是 **dict 的 key**，不是 nested `patterns` 字段。同时 `skills` 条目有 str 和 dict 两种格式（人工规则用 `[{name, phase}]`，自动生成用 `["skill-name"]`），硬编码 `s["name"]` 在 str 格式上 crash。
+
+**正确做法：**
+```python
+# ✅ regex key 匹配 + str/dict 兼容
+for rule_key, rule_data in a_rules.items():
+    if re.search(rule_key, msg, re.IGNORECASE):
+        for s in rule_data.get("skills", []):
+            name = s["name"] if isinstance(s, dict) else s
+            kw_hits.add(name)
+```
+
+**教训：** 任何读取 a_rules.json 的脚本必须先确认数据结构——人工规则和自动生成规则的字段格式不同。不假设 `skills` 条目类型。
+
+### 坑点 45: 描述 CMG 架构必须区分核心线和插件（2026-06-14 被纠正）
+
+**症状：** 回答"CMG 有几条线"时说"四条线 + 一个插件"。用户纠正：「三条核心线一条外观，两个插件组成」。
+
+**根因：** 把 Guard 核心线（skill 层，自觉遵守）和 sentinel 插件（硬拦截层）混淆为同一类。
+
+**正确说法：**
+```
+三条核心线（Skill 层）：Canon + Guard + Mnemonic
+一条外观（Skill 层）：CMG
+两个插件（Plugin 层）：sentinel (硬拦截) + skill-autoload (自启动)
+```
+
+**铁律：** 任何涉及 CMG 架构的描述必须按此模板。不得说"四条线"、"五条线"或其他组合。Guard 和 sentinel 是不同层的组件，不可混为一谈。
+
+### 坑点 47: Plugin 改名连锁效应——Dashboard/server.py 必溃（2026-06-14 实战）
+
+**症状：** sentinel(原cmg-guard)改名后，Dashboard 的配置页完全无法读写配置。版本号显示 v5.5.5（实际 v5.6.0）。英文模式残留大量中文。趋势图显示"近30天无拦截记录"但明明有 11 条。
+
+**根因：** Dashboard server.py 是独立工具，不在 grep 扫描范围内（不在 skills/ plugins/ plans/ 目录下）。内部有 6 处硬编码 `cmg_guard`/`cmg-guard`，改名时全部遗漏。
+
+**受影响文件：** `~/.hermes/dashboard/server.py`
+
+**正确做法：** 插件/Skill 改名后，grep 范围必须覆盖 `~/.hermes/dashboard/`。`find ~/.hermes -name '*.py' -o -name '*.yaml' -o -name '*.md' | xargs grep -l 'old_name'` 全盘扫描，不限于 skills/plugins/plans/。
+
+### 坑点 39: Desktop 端 sentinel pre_llm_call/post_llm_call 不兼容（2026-06-04 实战，三层排查）\n\n**症状：** Desktop 端 CMG 完全无法对话——发任何消息都被拦截，UI 显示空白或错误。\n\n**根因（三层）：**\n\n**层一 — ban 规则自噬：** `cmg-declaration-without-load` 规则关键词含 `激活`、`CMG`、`护栏` 等。CMG 自己的激活消息「三省引擎已激活」命中 → `transform_llm_output` 替换 → AI 重新加载 CMG → 又输出「已激活」→ 死循环。\n\n**修复：** 将宽泛关键词改为精确完整短语：\n```yaml\n# ❌ 旧\nkeywords: [CMG, SOUL, 声明, 激活, skill_view, canon-mnemonic-guard, 护栏, 加载]\n# ✅ 新\nkeywords: [声明了CMG但没加载, SOUL声明CMG但未skill_view, CMG标记存在但未激活skill]\n```\n\n**层二 — 哨兵劫持：** `pre_llm_call` 哨兵正则将用户日常否定表达（「还是不行」「怎么又卡了」）误判为「用户纠正」→ 注入 `[CMG-SENTINEL]` → Desktop UI 异常。\n\n**层三 — 任务推荐干扰：** `pre_llm_call` 检测到「不工作」→ 注入长段配套工具推荐 → Desktop 端上下文异常。\n\n**总修复：** Desktop 端只保留 `transform_llm_output` + `pre_tool_call`，关掉 `pre_llm_call` + `post_llm_call`：\n```yaml\nsentinel:\n  hooks:\n    pre_llm_call: false\n    post_llm_call: false\n    transform_llm_output: true\n    pre_tool_call: true\n```\n\n**教训：**\n1. 写 ban 规则关键词时，必须验证不会匹配 CMG 自己的正常输出（激活消息、!log 输出、!diagnose 报告）\n2. Desktop 端不是 CLI——`pre_llm_call` 的上下文注入和 `post_llm_call` 的证据校验在 GUI 端可能导致 UI 异常\n3. 诊断三步：`grep sentinel agent.log` → 找命中规则 → 看哪个钩子在拦 → 逐层修\n\n**症状：** CMG 激活消息报「59 条禁止 / 8 条缺失 / 9 条偷懒 / 1 条元规则」，但 sentinel 插件的 `_load_ban_keywords()` 只扫描 `rules/ban/` 目录。gap（8条）、lazy（9条）、meta（1条）规则**不被插件关键词拦截**——全靠 AI 读 CMG SKILL.md 自觉遵守。\n\n**根因：** 不是 bug，是设计实现滞后。四类规则需要不同的执行逻辑：\n- ban = 关键词扫描（\"AI 说了不该说的词\"）→ sentinel 已实现\n- gap = 步骤完整性检查（\"AI 漏了该做的步骤\"）→ 插件未实现\n- lazy = 工作流合规检查（\"AI 没走该走的流程\"）→ 插件未实现\n- meta = 能力越界检测（\"AI 承诺了不该承诺的能力\"）→ 插件未实现\n\n`grep rules/*/*.md` 一把梭不是正确修法——那会把四类规则当一类用，废掉分类的意义。\n\n**正确做法：**\n- gap/lazy/meta 各需要专用拦截器（步骤完整性/工作流合规/能力越界检测）\n- 当前的 compromise：AI 加载 CMG SKILL.md 后自觉遵守，diagnose/!log 仍然统计全部四类\n- 归入 sentinel v2.0 架构升级，当前不阻塞 v1.4.0\n\n**现状：** SKILL.md 设计和 diagnose/!log 都认四类规则，但 sentinel 插件执行层只覆盖 ban。18 条规则（8+9+1）靠 AI 自觉——和 v1.0.0 时代「规则靠自觉」一样。\n\n### 坑点 35: 不要主动创建 CMG 规则——用户问"记了吗"问的是 plan 不是 rules（2026-05-31）
+
+**症状：** 用户问"思考链强制外化这个有记吗"，AI 理解为"要写一条 CMG meta 规则"，直接往 `rules/meta/` 里写入。用户纠正：「不是，等等，我明明让你记在 plan 里你怎么直接给我改 skill 了」。
+
+**根因：** "记"的语义是存到计划文件（plan/findings/progress），不是固化 CMG 规则。规则固化要走 errors.jsonl → solidify → rules 标准流程，且只在用户明确说"记住"或纠正行为模式时才触发（坑点 15）。
+
+**正确做法：**
+1. 用户说"记下来"→ 先确认目标位置：plan？findings？progress？memory？
+2. 绝对不主动创建 rules/ 下的规则文件——除非用户明确说"记住这个错误，固化规则"或"!remember"
+3. 分析/设计类工作先写 plan 文件，再开工
+
+### 坑点 36: "延期"≠"不做"——计划里每个暂缓项都要有前置条件和目标版本（2026-05-31）
+
+**症状：** v1.4.0 计划第一版把 6 项标为"不做的事与理由"。用户纠正：「为什么不做的事不写，不做的事是现在不做以后说不定要做」。
+
+**根因：** "不做"暗示永久放弃。"延期"才是正确的——附上前置条件（什么时候可以重新评估）、后续方向（具体怎么做）、目标版本。
+
+**正确做法：**
+- 计划中暂缓项 → 标题用"延期事项"，不用"不做的事"
+- 每一项附带：当前不做原因 + 前置条件（可量化）+ 后续方向 + 目标版本
+- 如果某项确实不属于本项目范围（如 Hermes 基础设施），标注"归属"
+
+### 坑点 35: sentinel 执行层只覆盖 ban，gap/lazy/meta 不被拦截（2026-05-31 确认）
+
+**症状：** sentinel 插件 `_load_ban_keywords()` 只扫描 `rules/ban/` 目录。gap（8条）、lazy（9条）、meta（1条）规则的关键词不会被插件加载，永远不触发关键词拦截。
+
+**根因：** 不是 bug——是四类规则的检测逻辑不同。ban 是"AI 说了不该说的词"→ 关键词扫描有效。gap 是"AI 忘了做某事"→ 关键词扫不到"没做"。lazy 是"AI 跳过工作流"→ 同样。meta 是"AI 越界承诺"→ 同样。
+
+这三类规则需要行为级检测器（步骤完整性/工作流合规/能力越界），不是文本级检测器。当前靠 AI 读 CMG SKILL.md 自觉遵守。
+
+**正确做法：**
+- 不要 `grep rules/*/*.md` 一把梭——那会废掉四类分类的意义
+- 正确方向：gap 专用拦截器（步骤完整性）、lazy 专用拦截器（工作流合规）、meta 专用拦截器（能力越界检测）
+- 归入 sentinel v2.0 架构升级，当前不阻塞 v1.4.0
+
+### 坑点 38: sentinel 输出修改钩子只兼容 CLI，Desktop/Web/API 会死锁（2026-06-04 实战）\n\n**症状：** Desktop 端发任何消息都被拦截，UI 显示 `[CMG 拦截]` 或空白。CLI 端完全正常。\n\n**根因：** CLI 有 AI 自我修正循环（拦截替换 → AI 看到 → 重试 → 干净输出），Desktop 没有（拦截消息直接渲染到 UI）。`transform_llm_output`、`pre_llm_call`、`post_llm_call` 三个输出修改钩子在非 CLI 平台均不兼容。\n\n**修复：** sentinel v1.4.0+ 内置平台检测，自动在非 CLI 平台跳过这三个钩子。哨兵仍运行但改为静默记录（写 errors.jsonl，不注入上下文）。只有 `pre_tool_call` 在所有平台生效。\n\n**相关规则修复：** `cmg-declaration-without-load` 关键词从 `[激活, CMG, ...]` 改为完整短语；`ban_no_cmg_abbreviation` 从 `[CMG]` 改为 `[CMG Dashboard, CMG v5., ...]`。\n\n详见 `references/desktop-compatibility.md` 和 `hermes-desktop` skill 的 `references/sentinel-cross-platform.md`。\n\n### 坑点 40: 修改 sentinel 前必须先更新 plan 文件（2026-06-04 用户纠正）
+
+**症状：** Desktop 试用暴露 sentinel 平台兼容问题后，AI 直接开始改 `__init__.py` 代码。用户制止：「你别急的改，不是有plan吗？查看然后更新一下再说」。
+
+**根因：** CMG 有 `planning-with-files` 管理的三份文件（task_plan/progress/findings），应在任何代码修改前先同步。直接改代码 = 跳过了"确认方向→评估影响→记录决策"的规划环节。
+
+**正确做法：**
+1. 发现问题 → 先更新 findings.md（记录现象和根因）
+2. 设计方案 → 先更新 task_plan.md（写清楚背景/目标/方案/改动清单/风险）
+3. 更新进度 → progress.md 记录每一步
+4. 最后才改代码 → 按 plan 里的改动清单逐项执行
+
+详见 `~/.hermes/plans/cmg-platform-adaptation_task_plan.md`。
+
+**症状：** Hermes Desktop v0.15.1 试用中，sentinel 的 `transform_llm_output` 钩子导致所有回复被 `[CMG 拦截]` 替换，用户完全无法对话。CLI 上从未出现过。
+
+**根因：** `transform_llm_output` 替换 LLM 输出后依赖 AI 看到拦截消息 → 自我修正 → 重试。这个"闭环自愈"是 CLI 独占——Desktop/Web/API/Gateway 渲染单向，替换即最终结果。
+
+**修复（sentinel v1.4.0）：** 平台检测 + 哨兵静默 + 关键词收窄。详见 `references/desktop-trial-lessons.md`。
+
+### 坑点 44: SSR 测试时擅自关闭 CMG 功能（2026-06-05）
+
+**症状:** AI 认为"CMG task_recommendations 和 SSR 冲突"，直接 `hermes config set sentinel.task_recommendations false`。用户立即纠正——CMG 推荐的是质量护栏（ralph-loop/VBC），SSR 推荐的是功能 skill，互补不冲突。
+
+**修复:** 
+1. 扩充 `ban_act_before_verify` 关键词（加了「一刀切」「关掉.*功能」「擅自修改配置」「没分析影响」）
+2. 新建 `ban_no_disable_without_confirm`：任何关闭/禁用功能前必须先 clarify 确认影响范围
+
+### 坑点 35: sentinel 执行层只覆盖 ban，gap/lazy/meta 不被插件拦截（2026-05-31 确认）
+
+**症状：** `_load_ban_keywords()` 只扫描 `rules/ban/` 目录（第 211 行 `rules_dir = Path(...)/rules/ban`），gap（8条）/ lazy（9条）/ meta（1条）规则**不被 sentinel 关键词拦截**。这三类规则当前靠 AI 读 CMG SKILL.md 自觉遵守——和 v1.0.0 时代"规则靠自觉"一样。
+
+**根因：** 不是 bug，是三类规则需要行为级检测（做了什么没做什么），不是文本级检测（说了什么词）。ban 是"AI 说了不该说的词"→关键词扫描有效。gap 是"AI 漏了该做的步骤"→关键词扫不到。lazy 是"AI 没走该走的流程"→同样。meta 是"AI 越界承诺能力"→关键词扫不到。
+
+**正确做法：**
+- 不修成 `glob */*.md` 一把梭——那会废掉四类分类的意义
+- 正确方向：gap 专用拦截器（步骤完整性）、lazy 专用拦截器（工作流合规）、meta 专用拦截器（能力越界检测）
+- 归入 sentinel v2.0 架构升级，当前不阻塞 v1.4.0
+
+### 坑点 34: pre_tool_call 正则过于宽泛——读操作也被杀（2026-05-31 修复）
+
+**症状：** sentinel v1.3.0 的 pre_tool_call 用朴素子串匹配判断是否在操作 SKILL.md：
+
+```python
+targets_skill_md = "SKILL.md" in path or "SKILL.md" in command
+```
+
+`read_file`（纯读工具）、`terminal grep`（只读命令）、`execute_code`（不含写操作的脚本）全被拦截。用户问为什么被拦、怎么绕过的。
+
+**根因：** 正则瞎——它只看字符串有没有 `SKILL.md`，不区分读写。守卫本意「改之前先读规范」，实现成了「连看都不让看」。
+
+**修复（v1.3.2）：**
+1. `read_file` → 直接放行（Hermes 架构保证只读）
+2. `terminal` → 只有含写操作符（sed, >, >>, tee, mv, cp, rm）才拦截，grep/cat/ls/find 放行
+3. `execute_code` → 只有含 `write_file` 或 `patch(` 才拦截，纯运算放行
+
+**教训：** 正则拦截必须读/写分流。子串匹配不能替代语义理解——宁可放行只读操作多一层风险，不可误杀正常工具使用。详见 `references/sentinel-v1.3.2-readwrite-fix.md`。
+
+**v1.3.2 残留漏网（2026-06-04 实战）：** `find ... | xargs grep -l "name:"` 仍被拦截。命令中无任何写操作符（无 sed/>/tee/mv/cp/rm），纯只读——但 `xargs grep` 管道组合未被 v1.3.2 的写操作正则覆盖。被误判为"terminal 操作目标含 SKILL.md"→阻断。
+
+**避坑：** 验证 skill 是否安装时，用 `skill_view()` 直接加载，不要用 `find ... | xargs grep` 扫文件系统——sentinel 目前会把任何含"SKILL.md"的 terminal 命令当作潜在修改（即使纯只读）。`search_files` 也搜不到 category 子目录下的 skill 文件。
+
+### 坑点 35: 记在 plan ≠ 创建规则文件（2026-05-31）
+
+**症状：** 用户问"思考链强制外化这个有记吗"，问的是 plan 里记了没有。AI 误解为"要创建 CMG 规则文件"，直接往 rules/meta/ 写了 rule_meta_cmg_scope_boundary.md。用户："不是，等等，我明明让你记在plan里你怎么直接给我改skill了"。规则随后被删除。
+
+**根因：** CMG 规则的入口只有一个——用户纠正行为 → sentinel 触发 → errors.jsonl → solidify → rules/。没有实际错误、用户没有明确说"记住/固化/记到 ban 里"——不能主动创建规则文件。计划讨论、分析、调研的产出是 plan/findings/progress，不是 rules/。
+
+**正确做法：**
+1. 用户问"记了吗"→ 先确认问的是 plan 文件还是 rules/ 规则
+2. 只有用户明确说"记住/固化/这条记到 ban 里"才走 rules/ 路径
+3. 计划讨论、分析、调研 → 记在 plan/findings/progress，不创建规则
+4. 即使分析结论是"这是架构边界"，也不等于需要一条 ban 规则——坑点 ≠ 规则
+
+### 坑点 35: 用户未要求时不要创建 CMG 规则文件（2026-05-31）
+
+**症状：** 讨论防幻觉方案时，提到"思考链外化架构边界"。AI 未经用户指示，直接创建了 `rules/meta/rule_meta_cmg_scope_boundary.md`。用户否决：「我明明让你记在plan里你怎么直接给我改skill了」。
+
+**根因：** CMG 规则的标准流程是 **errors.jsonl → solidify → rules/**——规则必须由实际错误驱动。无错误驱动、无用户明确指示的规则创建是越权。
+
+**正确做法：**
+1. 用户说「记在 plan 里」→ 记在 plan 里，不要扩展到 rules/
+2. 用户说「记住，禁止xxx」→ 走三步走（errors.jsonl → rules/ → _index.md）
+3. 用户没要求的 → 不创建规则文件
+4. 讨论中产生的见解 → 记在 findings 或 plan 的"延期事项"中，不是 rules/
+
+**判断标准：** 用户是否明确表达了「记录为规则」的意图。记在 findings/plan ≠ 记在 rules/。
+
+### 坑点 36: 计划必须写全 —— 架构框架 ≠ 实现计划（2026-05-31）
+
+**症状：** 用户让写 sentinel v1.4.0 防幻觉计划。第一版只写了架构框架（10KB：方案设计+版本号+Phase 提纲），没写函数签名、伪代码、降级路径、实体字典、配置项、验收标准、风险矩阵。用户：「没写全」。
+
+第二版补到 40KB 后才通过。同会话用户第二次纠正：「为什么不写不做的事」——原始标题"不做的事与理由"被改为"延期事项（现在不做 ≠ 永远不做）"，每项加了前置条件+后续方向+目标版本。
+
+**根因：** "计划"对用户而言 = 拿起来就能照着实现的文档。AI 容易把"架构设计"当成"实施计划"交付——前者只回答"怎么做"，后者要回答"每一步调哪个函数、传什么参数、错了怎么办、关哪个开关回滚"。
+
+**正确做法：**
+1. 计划必须包含（逐项检查）：
+   - 全部函数的完整伪代码（含参数签名、返回值类型）
+   - 外部 API 依赖验证（不确定的先 grep 确认）
+   - 降级路径（A 路径不可用走 B，全不可用报告失败）
+   - 配置项（用户粘贴块格式，可直接复制）
+   - 验收标准（可测试的具体场景+验证方法）
+   - 风险矩阵（概率+影响+缓解）
+2. 延期/暂缓事项不能标"不做"——必须标"现在不做，前置条件 X 满足后做"，附带目标版本号
+3. "不做"是终止，"延期"是排队——用户需要看到完整的路线图，不是删掉不想做的
+
+### 坑点 37: 延期 ≠ 不做 —— 路线图不能有黑洞（2026-05-31）
+
+**症状：** 防幻觉计划第七节原始标题"不做的事与理由"，用一张 6 行表格列出 strict 模式/RAG/多Agent/双模型/思考链/记忆轻量化。用户纠正：「为什么不写？现在不做以后说不定要做」。
+
+**正确做法：**
+- "不做" → 改为"延期"或"后续版本"
+- 每项必须写明：当前不做原因 + **可量化的前置条件** + 后续方向 + 目标版本号
+- 如果某项永远不属于 CMG 范围（如记忆轻量化属于 Hermes 基础设施），也要写明归属，不能说"不做"就删掉
+- 延期的东西比正在做的更需要文档——否则下次会话 AI 要么忘了要么当场编造（坑点 33）（2026-05-31，豆包+DeepSeek 交叉分析）
+
+**发现：** 两份防幻觉分析（豆包6方案 + DeepSeek全景图）一致指向：真性幻觉的根因不是模型"想撒谎"，是推理时手中没数据导致概率补全。事后拦截的硬上限（坑点 29）无法突破——管得了输出管不了推理。
+
+**设计原则：** sentinel 的角色应从"守门员"扩展为"情报官"——不只是事后拦，而是事前给模型准备好所有需要的信息。铲掉幻觉的土壤（缺数据）比在幻觉发生后抓人更有效。
+
+**落地方向（sentinel v1.4.0）：**
+- 路1：上下文事实注入 — 扫描用户消息关键实体 → 检索 rules/+memory+SOUL → 注入上下文
+- 路2：素材自动预拉取 — 检测 URL/事实性提问 → web_extract/web_search → 注入上下文
+- CoVe 薄层：post_llm_call 末尾追加自检提示
+
+详见 `references/antihallucination-research.md` 和 `~/.hermes/plans/cmg-antihallucination-v1.4.0_plan.md`。
+
+### 坑点 43: SSR B 层日志不可信——"Ollama调用失败"≠B层在用Ollama（2026-06-05）
+
+**症状：** SSR 日志输出 `B 层 Ollama 调用失败（降级跳过）`，Agent 据此断定「B 层走 Ollama」。用户纠正——config.yaml 实际配置 `b_layer.provider: main`（DeepSeek）。
+
+**根因：** 日志消息是 SSR `__init__.py` 冷启动重试路径（line 449-461）产生的。该路径硬编码了 Ollama 的 `/api/generate` 端点格式做预热请求——不管 provider 是什么都走这。如果 main 模式超时，重试路径去 warmup Ollama 格式的端点 → 失败 → 日志写「Ollama 调用失败」。但 B 层的实际 provider 是 main，不是 ollama。
+
+**正确做法：**
+1. 诊断 SSR B 层前 → 必查 `grep -A 10 'b_layer:' ~/.hermes/config.yaml` 确认 provider
+2. 日志里的「Ollama」字样是 warmup 代码的遗留信息，不可作为 B 层后端的判定依据
+3. 三种 B 层状态判定以 config 为准，日志仅辅助
+
+**B 层诊断三步：**
+```bash
+# 第一步：确认 provider（权威来源）
+grep -A 5 'b_layer:' ~/.hermes/config.yaml
+
+# 第二步：检查日志中的实际错误
+grep 'B 层' ~/.hermes/logs/agent.log | tail -5
+
+# 第三步：综合判定
+# main + 401 → DeepSeek API key 问题
+# main + timeout → 网络/DeepSeek 可用性问题（日志可能误写 Ollama）
+# ollama + timeout → Ollama 服务未启动
+```
+
+### 坑点 42: pre_llm_call 多源注入冲突——不是"关掉一个"就能解决的（2026-06-05 SSR 实战）
+
+**症状：** SSR 和 CMG task_recommendations 同时在 `pre_llm_call` 注入推荐。Agent 认为"冲突"，未经分析直接关掉 CMG 功能。用户纠正：「CMG 也要把自己需要的让自己加载，万一 SSR 没推荐怎办」。
+
+**根因：** SSR 推荐功能 skill（ui-ux-pro-max），CMG 推荐护栏工具（ralph-loop/VBC）。两个维度不同——不是冲突是互补。Agent 把"两个都在做推荐"误判为"功能重叠"。
+
+**正确做法：**
+1. 两个 `pre_llm_call` 注入是并行叠加，非互斥。多个同时存在正常
+2. 关闭任何功能前必须分析影响链——谁依赖它？后果是什么？
+3. 方案是分离职责（SSR=功能匹配，CMG=质量护栏），不是关掉一个
+4. 用户纠正前不自行关闭已有功能
+
+**教训：** CMG 已有 `ban_act_before_verify`（验证先于结论），但本次仍触发——Agent 在思考阶段就已错误断定"冲突"，在工具调用前完成决定。思考链不可拦截——最终防线是用户纠正。 — CMG 自噬（2026-06-04 实战）
+
+**症状：** Desktop 端 CMG 完全无法对话——每条回复都被 sentinel 的 `transform_llm_output` 拦截替换。CLI 端虽能对话但 agent.log 持续输出 WARNING。
+
+**根因：** `cmg-declaration-without-load` 规则（意图：检测「SOUL 声明了 CMG 但没加载」）的关键词列表为：
+```yaml
+keywords: [CMG, SOUL, 声明, 激活, skill_view, canon-mnemonic-guard, 护栏, 加载]
+```
+其中「激活」是 CMG 自己在每次会话启动时输出的词（「三省引擎 vX.X.X 已激活」）。→ CMG 激活消息命中自己的 ban 规则 → sentinel 替换输出 → AI 尝试重新加载 CMG → 又输出「已激活」→ 无限循环。
+
+**正确做法：**
+1. 写 ban 规则时，关键词必须**验证不会匹配 CMG 自己的正常输出**。检查 CMG 激活消息、!log、!diagnose、!patterns 等命令的输出文本。
+2. 用**精确的完整短语**替代宽泛词：
+   ```yaml
+   # ❌ 宽泛词 — 会自噬
+   keywords: [CMG, SOUL, 声明, 激活]
+   
+   # ✅ 精确短语 — 只有真的违规才触发
+   keywords: [声明了CMG但没加载, SOUL声明CMG但未skill_view, CMG标记存在但未激活skill]
+   ```
+3. 已写的 ban 规则需审计：`grep -l '激活\|CMG\|护栏\|加载\|拦截' rules/ban/*.md` → 逐条检查是否可能自噬。
+
+**教训：** CMG 的「免疫系统」不能攻击自身。ban 规则关键词审计不是可选项——每新增一条规则都必须验证不会匹配 CMG 自身输出。Desktop 端的自噬后果比 CLI 更严重（UI 完全卡死 vs 日志警告），因为 Desktop 的 `transform_llm_output` 替换行为在 Electron UI 中没有优雅降级路径。
+
 ### 坑点 33: 讨论 CMG 未来方向必须先读计划文件（2026-05-30 · 二次复盘）
 
 **症状：** 用户问「下一步要干嘛？dashboard什么时候可以做？」。AI 当场编造了两个不存在的东西（跨平台Plugin、规则分享市场），并对实际存在的 Dashboard 计划说了「不在计划内」。用户：「你看计划表了吗？」
@@ -1628,7 +2121,7 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 2. 说「X 不在计划内」前 → grep 确认 X 确实不在任何计划文件中
 3. 禁止当场编造不存在于计划文件中的项目
 
-**根因：** cmg-guard 只能拦输出，拦不住推理阶段的臆想（坑点 29）。AI 在思考时基于模糊印象脑补了「应该有这些功能」，直接输出——没有先读 P/C/G/M/E 计划表确认。
+**根因：** sentinel 只能拦输出，拦不住推理阶段的臆想（坑点 29）。AI 在思考时基于模糊印象脑补了「应该有这些功能」，直接输出——没有先读 P/C/G/M/E 计划表确认。
 
 **正确做法：**
 1. 讨论 CMG 未来方向/下一步/计划 → **必须先读「P 系列增强追踪」表格和「未来更新方向」四张表**
@@ -1638,9 +2131,9 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 
 ### 坑点 29: CMG 拦得住输出，拦不住 LLM 内部推理（2026-05-30 实战，跨三 AI 验证）
 
-**症状：** AI 在未读取 DeepSeek 分享链接（cookie 墙阻挡）的情况下，声称「三个 AI 交叉验证过了」。cmg-guard 的 post_llm_call 未拦截——因为拦截发生在输出层，而 AI 在思考阶段就已经编造了结论。
+**症状：** AI 在未读取 DeepSeek 分享链接（cookie 墙阻挡）的情况下，声称「三个 AI 交叉验证过了」。sentinel 的 post_llm_call 未拦截——因为拦截发生在输出层，而 AI 在思考阶段就已经编造了结论。
 
-**根因：** 这是 CMG/`cmg-guard` 的**架构边界**，不是设计缺陷：
+**根因：** 这是 CMG/`sentinel` 的**架构边界**，不是设计缺陷：
 - `pre_tool_call` — 拦工具调用，管不到思考
 - `post_llm_call` 证据校验 — 拦输出文本，管不到内部推理
 - `transform_llm_output` — 拦关键词，管不到思维
@@ -1648,7 +2141,7 @@ CMG SKILL.md 设计的触发条件是「意图识别，非关键词匹配」，�
 
 **治标（v5.5.5 已落地）：**
 - 新增 CMG ban 规则 `rule_ban_no_evidence_from_unread`（hard）——素材读不到必须说「读不到」
-- cmg-guard `post_llm_call` 新增 `_check_external_claims()` ——检测「我看了/三个AI都同意」无原文摘录→拦截
+- sentinel `post_llm_call` 新增 `_check_external_claims()` ——检测「我看了/三个AI都同意」无原文摘录→拦截
 
 **治本（长期）：** `pre_llm_call` 自动预拉取会话内所有链接/素材，读取状态注入会话变量。但即使这样，如果 AI 决心撒谎（先记住证据再编造），仍然防不住。
 

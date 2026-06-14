@@ -28,7 +28,7 @@ transform_tool_result
 - `__init__.py`: 替换 hook 函数签名，新增 `is_first_turn` 参数，跟踪已注入会话避免重复
 - Context 注入到用户消息而非 system prompt（保护 prompt 缓存）
 
-### cmg-guard Plugin
+### sentinel Plugin
 
 **v1.0.0** → **v1.1.0**
 
@@ -52,7 +52,7 @@ Hermes 升级可能清空 `~/.hermes/skills/` 下的文件。恢复步骤：
 2. 更新插件版本：
    ```bash
    cp -r /tmp/cmg/skill-autoload ~/.hermes/plugins/
-   cp -r /tmp/cmg/cmg-guard ~/.hermes/plugins/
+   cp -r /tmp/cmg/sentinel ~/.hermes/plugins/
    ```
 
 3. 运行 init.py 重新配置
@@ -60,5 +60,5 @@ Hermes 升级可能清空 `~/.hermes/skills/` 下的文件。恢复步骤：
 4. 重启 Hermes 并检查日志：
    ```bash
    grep 'unknown hook' ~/.hermes/logs/agent.log  # 应无输出
-   grep 'cmg-guard' ~/.hermes/logs/agent.log      # 应显示 registered
+   grep 'sentinel' ~/.hermes/logs/agent.log      # 应显示 registered
    ```

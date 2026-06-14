@@ -2,7 +2,7 @@
 
 ## 背景
 
-CMG SKILL.md 设计意图识别为「语义判断，非关键词匹配」。但 cmg-guard Plugin v1.0.0 只做了关键词子串匹配，导致大量口语化纠正漏过。
+CMG SKILL.md 设计意图识别为「语义判断，非关键词匹配」。但 sentinel Plugin v1.0.0 只做了关键词子串匹配，导致大量口语化纠正漏过。
 
 v1.1.0 引入双层模型解决此问题。
 
@@ -10,7 +10,7 @@ v1.1.0 引入双层模型解决此问题。
 
 ```
 用户消息
-  ├─ A 层哨兵（cmg-guard Plugin · pre_llm_call）
+  ├─ A 层哨兵（sentinel Plugin · pre_llm_call）
   │   否定词正则广撒网 — 三组正则覆盖 80%+ 纠正句式
   │   → 命中 → 注入 [CMG-SENTINEL] suspected_correction
   │   → 未命中 → 放行
@@ -20,7 +20,7 @@ v1.1.0 引入双层模型解决此问题。
   │   → 确认是纠正 → 执行 CMG 三步走
   │   → 不是纠正 → 忽略标记，正常执行
   │
-  └─ C 层硬拦截（cmg-guard Plugin · transform_llm_output）
+  └─ C 层硬拦截（sentinel Plugin · transform_llm_output）
       扫描 AI 输出 → 命中 ban 规则关键词 → 替换输出
 ```
 

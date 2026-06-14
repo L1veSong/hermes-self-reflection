@@ -1,0 +1,37 @@
+name: sentinel
+version: 1.4.0
+description: |
+  CMG system-level enforcement plugin. Hard-enforces rules at multiple layers:
+  - pre_tool_call: blocks SKILL.md edits (read/write-aware — read_file/grep OK)
+  - pre_llm_call: step-completeness check + sentinel + blacklist
+  - post_llm_call: output rescan
+  - transform_llm_output: ban keyword replacement in AI output
+  - 13 additional configurable hooks for advanced enforcement
+author: L1veSong
+license: MIT
+provides_hooks:
+  # Core (default ON)
+  - pre_tool_call
+  - pre_llm_call
+  - post_llm_call
+  - transform_llm_output
+  # Tool layer (configurable)
+  - post_tool_call
+  - transform_tool_result
+  - transform_terminal_output
+  # LLM layer (configurable)
+  - pre_api_request
+  - post_api_request
+  # Session layer (configurable)
+  - on_session_start
+  - on_session_end
+  - on_session_finalize
+  - on_session_reset
+  # Gateway/platform layer (configurable)
+  - pre_gateway_dispatch
+  - pre_approval_request
+  - post_approval_response
+  # Sub-agent layer (configurable)
+  - subagent_stop
+kind: standalone
+homepage: https://github.com/L1veSong/CMG

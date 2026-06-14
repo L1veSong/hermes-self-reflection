@@ -25,8 +25,8 @@ python3 ~/.hermes/dashboard/server.py --port 8766  ← 自定义端口
 | GET | `/` | 服务完整 Dashboard HTML |
 | GET | `/api/rules` | 返回所有规则 JSON |
 | GET | `/api/stats` | 返回拦截/错误/会话统计 |
-| GET | `/api/config` | 返回 cmg_guard 配置 |
-| POST | `/api/config` | 写入 cmg_guard 配置到 config.yaml |
+| GET | `/api/config` | 返回 sentinel 配置 |
+| POST | `/api/config` | 写入 sentinel 配置到 config.yaml |
 | POST | `/api/rules` | 创建新规则 .md 文件 |
 | DELETE | `/api/rules` | 删除规则 .md 文件 |
 

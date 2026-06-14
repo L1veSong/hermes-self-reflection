@@ -21,9 +21,9 @@ done
 
 **修复：** 打包前逐文件 diff → 发现漂移 → cp 同步 → 再打包。
 
-## cmg-guard.zip 损坏检测
+## sentinel.zip 损坏检测
 
-**症状：** `ls -la ~/Desktop/cmg-guard.zip` 显示 945B，实际应该 ~17KB。`unzip -l` 揭示只有一个损坏文件。
+**症状：** `ls -la ~/Desktop/sentinel.zip` 显示 945B，实际应该 ~17KB。`unzip -l` 揭示只有一个损坏文件。
 
 **根因：** 某次打包操作出错，只写入了一个文件而非完整插件目录。
 
@@ -41,7 +41,7 @@ ls -la ~/Desktop/*.zip | awk '{if ($5 < 2000) print "⚠️ 异常小: " $NF}'
 5. `unzip -l` 验证 ZIP 内容完整性
 6. `unzip -p ... | grep` 验证 ZIP 内关键内容（如新格式）
 7. skill_view 四包全部 available
-8. agent.log 检查 cmg-guard 拦截记录
+8. agent.log 检查 sentinel 拦截记录
 9. 子包 _comment 声明 vs 实际版本号对比
 10. SOUL 激活标记版本匹配
 
@@ -55,7 +55,7 @@ ls -la ~/Desktop/*.zip | awk '{if ($5 < 2000) print "⚠️ 异常小: " $NF}'
 | ZIP 大小 | ✅ 147KB / 82文件 |
 | ZIP 内容 | ✅ 新诊断格式存在，旧格式零残留 |
 | skill_view | ✅ 4/4 available |
-| cmg-guard 拦截 | ✅ agent.log 10次命中 |
+| sentinel 拦截 | ✅ agent.log 10次命中 |
 | _comment 一致性 | ✅ canon 2.7.2/guard 4.8.2/mnemonic 3.5.3 |
 | SOUL 标记 | ✅ v5.5.4 |
 | 副本清理 | ✅ canon/guard/mnemonic 根副本已删 |

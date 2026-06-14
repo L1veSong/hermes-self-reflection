@@ -1,8 +1,28 @@
 # CMG 生态系统更新日志
 
-## v5.5.4 (2026-05-28) — cmg-guard v1.2.0
+## v5.5.5 (2026-05-30) — sentinel v1.3.0 + 四名冲突检测
 
-### cmg-guard v1.1.0 → v1.2.0
+### 新增
+- **sentinel v1.2.0 → v1.3.0**：17 个 hook 全面覆盖五阶段
+  - **pre_tool_call 阻断**：直接 patch SKILL.md 未经 hermes-agent-skill-authoring → 内核拦截，AI 无执行机会
+  - **自披露闭环**：AI 断言必须附带证据（「测试通过了」→ 无证据 → 拦截要求补充）
+  - **任务完成声明验证**：AI 声称「完成/搞定/已打包」→ 无核对痕迹 → 拦截
+  - **外部来源主张验证**：AI 声称「我看了/三个AI都同意/交叉验证」→ 无原文摘录 → 拦截
+  - **拦截通知 visible 模式**：用户可见拦截详情，透明化
+- **四名冲突检测**：init.py 安装时 + !diagnose 启动时扫描 canon/guard/mnemonic/canon-mnemonic-guard 是否与第三方 skill 重名
+- **scripts/check-name-conflicts.py**：独立冲突检测工具，支持 --fix 交互修复
+- 冲突解决三选一：改第三方/改 CMG/两者都改/跳过
+
+### 子包版本
+- canon v2.7.2 / guard **v4.8.3**（文档精简 697→77 行）/ mnemonic v3.5.3（无变更）
+- canon-mnemonic-guard v5.5.5（+四名冲突检测 + sentinel v1.3.0）
+- skill-autoload v1.0.1（无变更）/ sentinel v1.3.0（17hooks + pre_tool_call阻断 + 自披露闭环）
+
+---
+
+## v5.5.4 (2026-05-28) — sentinel v1.2.0
+
+### sentinel v1.1.0 → v1.2.0
 - **步骤完整性检查**：pre_llm_call 新增 4 条强制规则（链接完整阅读、文件覆盖度校验、Orchestrator clarify、Skill workflow 执行）
 - **分阶段升级系统**：同一错误逐步升级（第1次标记→第2次警告→第3次推草稿→第5次黑名单）
 - **新增 post_llm_call 钩子**：AI 回复后二次黑名单扫描
@@ -19,14 +39,14 @@
 
 ### 新增
 
-- **双层哨兵**：A 层（cmg-guard Plugin）正则广撒网 + B 层（CMG Skill）LLM 语义判断，关键词漏网率从 80% 降至接近零
+- **双层哨兵**：A 层（sentinel Plugin）正则广撒网 + B 层（CMG Skill）LLM 语义判断，关键词漏网率从 80% 降至接近零
 - **意图识别优先规则**（rule_meta_001）：用户纠正自动触发 CMG 三步走，不等追问
 - **init.py 自动配置**：安装时自动写入 config.yaml（启用插件 + 自动加载），零手动
 - **一键卸载**：`python3 init.py --uninstall` 恢复安装前状态，不碰其他配置
 
 ### 变更
 
-- cmg-guard v1.0.0 → v1.1.0：新增 `pre_llm_call` sentinel hook（默认开启），三组正则覆盖 80%+ 纠正句式
+- sentinel v1.0.0 → v1.1.0：新增 `pre_llm_call` sentinel hook（默认开启），三组正则覆盖 80%+ 纠正句式
 - skill-autoload v1.0.0 → v1.0.1：`pre_system_prompt` → `pre_llm_call`，适配 Hermes ≥v0.14.0
 - init.py：+Phase 7.5 自动配置 config.yaml，+--uninstall/--purge 卸载支持
 - README：重写为完整安装指南 + 兼容性矩阵
@@ -49,7 +69,7 @@
 ### 新增插件
 
 - skill-autoload v1.0.0：pre_system_prompt 自动加载 CMG
-- cmg-guard v1.0.0：transform_llm_output 硬拦截
+- sentinel v1.0.0：transform_llm_output 硬拦截
 
 ### canon-mnemonic-guard v5.5.1
 

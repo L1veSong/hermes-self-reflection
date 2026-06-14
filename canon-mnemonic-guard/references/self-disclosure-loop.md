@@ -23,17 +23,17 @@ AI 经常做出未经验证的断言：「测试通过了」「Obsidian 已安�
 
 ## 如何启用
 
-### Step 1: 确保 cmg-guard v1.3.0 已安装
+### Step 1: 确保 sentinel v1.3.0 已安装
 
 ```bash
 # 检查版本
-grep version ~/.hermes/plugins/cmg-guard/plugin.yaml
+grep version ~/.hermes/plugins/sentinel/plugin.yaml
 # 应显示: version: 1.3.0
 ```
 
 ### Step 2: 添加 step check 规则
 
-cmg-guard v1.3.0 自带 `evidence_for_claims` 步骤检查规则（默认开启）。无需额外配置。
+sentinel v1.3.0 自带 `evidence_for_claims` 步骤检查规则（默认开启）。无需额外配置。
 
 ### Step 3: 添加 ban 关键词（可选加强）
 
@@ -41,7 +41,7 @@ cmg-guard v1.3.0 自带 `evidence_for_claims` 步骤检查规则（默认开启�
 
 ### Step 4: 开启 ralph-loop 联动（可选）
 
-cmg-guard 拦截后，CMG 微型调度器自动推荐 ralph-loop 重做。确保 ralph-loop skill 已安装：
+sentinel 拦截后，CMG 微型调度器自动推荐 ralph-loop 重做。确保 ralph-loop skill 已安装：
 
 ```bash
 ls ~/.hermes/skills/software-development/ralph-loop/SKILL.md
@@ -58,7 +58,7 @@ ls ~/.hermes/skills/software-development/ralph-loop/SKILL.md
 如果觉得太严格，在 config.yaml 中关闭步骤检查：
 
 ```yaml
-cmg_guard:
+sentinel:
   step_check: false
 ```
 

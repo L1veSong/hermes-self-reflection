@@ -40,7 +40,7 @@ metadata:
 
 | Hook | 检查内容 |
 |------|---------|
-| `pre_tool_call` | 直接 patch SKILL.md → 阻断，要求先加载 authoring |
+| `pre_tool_call` | 直接 patch/write SKILL.md → 阻断，要求先加载 authoring。v1.3.2: 读写感知——read_file/grep 放行，sed/>/write_file 拦截 |
 | `pre_llm_call` | 哨兵扫描 + 步骤完整性 + 黑名单 |
 | `post_llm_call` | 任务完成证据校验 + 外部来源主张验证 |
 | `transform_llm_output` | 关键词黑名单替换 |
@@ -69,6 +69,8 @@ python3 ~/.hermes/skills/software-development/canon-mnemonic-guard/scripts/init.
 3. **intercept_log 需要有效时间戳** — 手工填充会导致效能分析失败。
 4. **输出层拦截不覆盖执行层偷懒** — AI 跳过中间步骤不产生违规关键词→拦截器不触发。这是架构边界，非 Bug。
 5. **Skill 层规则不是硬拦截** — 非 Hermes 平台上 Guard 完全靠 AI 自觉。要强制必须用 Plugin。
+6. **cmg-guard 插件在非 CLI 平台需特殊配置** — Desktop/Web/API 没有 AI 自我修正循环，`transform_llm_output`/`pre_llm_call`/`post_llm_call` 三个钩子会导致输出死锁。Desktop 端必须关掉这三项，只保留 `pre_tool_call: true`。详见 CMG 外观层 `references/desktop-compatibility.md`。
+7. **cmg-guard 代码变更后必须重启验证** — 不能凭感觉说「应该生效了」。需逐项 `grep` agent.log + 统计规则数 + 确认钩子配置。详见 CMG 外观层 `references/desktop-compatibility.md` 的「重启验证清单」。
 
 ## 参考文件
 
